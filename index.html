@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contestador RAG – Preguntas de Investigación</title>
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #22263a;
+  --surface3: #2a2f47;
+  --border: #2e3352;
+  --accent: #5b7cf6;
+  --accent2: #38c9b0;
+  --accent3: #f6c25b;
+  --text: #e8eaf6;
+  --muted: #7b8ab8;
+  --danger: #e05c6b;
+  --success: #38c9b0;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --radius: 10px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 60px;
+}
+header { width: 100%; max-width: 960px; margin-bottom: 28px; }
+.logo-row { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.logo-icon {
+  width: 42px; height: 42px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0;
+}
+h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.3px; }
+.subtitle { color: var(--muted); font-size: 0.84rem; margin-left: 54px; }
+.top-bar { width: 100%; max-width: 960px; display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  width: 100%; max-width: 960px;
+  margin-bottom: 14px;
+}
+.card-title { font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 14px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px; }
+@media (max-width: 700px) { .grid-2,.grid-4 { grid-template-columns: 1fr; } }
+label { font-size: 0.78rem; color: var(--muted); display: block; margin-bottom: 5px; }
+input[type="password"], input[type="text"], input[type="number"], select, textarea {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-family: var(--font-sans);
+  font-size: 0.87rem; padding: 8px 11px; outline: none; transition: border-color .2s;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 80px; }
+select option { background: var(--surface2); }
+button.btn {
+  background: linear-gradient(135deg, var(--accent), #7b5cf8);
+  border: none; border-radius: 8px; color: #fff; cursor: pointer;
+  font-family: var(--font-sans); font-size: 0.86rem; font-weight: 600;
+  padding: 9px 18px; transition: opacity .2s, transform .1s; white-space: nowrap;
+}
+button.btn:hover { opacity: 0.88; }
+button.btn:active { transform: scale(0.98); }
+button.btn:disabled { opacity: 0.38; cursor: not-allowed; }
+button.btn-secondary { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+button.btn-secondary:hover:not(:disabled) { border-color: var(--accent); }
+button.btn-success { background: linear-gradient(135deg, #1e9e82, #38c9b0); }
+button.btn-warning { background: linear-gradient(135deg, #b87d1a, var(--accent3)); }
+button.btn-danger { background: linear-gradient(135deg, #9e2030, var(--danger)); }
+button.btn-sm { padding: 5px 12px; font-size: 0.78rem; }
+button.btn-xs { padding: 3px 8px; font-size: 0.72rem; border-radius: 5px; }
+#questions-list { display: flex; flex-direction: column; gap: 8px; }
+.q-row { display: flex; gap: 8px; align-items: flex-start; }
+.q-num { flex-shrink: 0; width: 26px; height: 26px; background: var(--surface2); border-radius: 50%; font-size: 0.73rem; color: var(--muted); display: flex; align-items: center; justify-content: center; margin-top: 8px; font-family: var(--font-mono); }
+.q-row textarea { min-height: 50px; }
+.q-del { flex-shrink: 0; margin-top: 8px; background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); cursor: pointer; padding: 3px 8px; font-size: 0.78rem; transition: all .2s; }
+.q-del:hover { border-color: var(--danger); color: var(--danger); }
+#progress-area { display: none; flex-direction: column; gap: 6px; }
+.progress-bar-wrap { background: var(--surface2); border-radius: 99px; height: 5px; overflow: hidden; }
+.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 99px; transition: width .35s ease; width: 0%; }
+.progress-label { font-size: 0.78rem; color: var(--muted); }
+#log { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); background: var(--surface2); border-radius: 8px; padding: 9px 12px; max-height: 130px; overflow-y: auto; display: none; line-height: 1.6; white-space: pre-wrap; }
+.log-ok { color: var(--success); }
+.log-err { color: var(--danger); }
+.log-warn { color: var(--accent3); }
+#cost-bar { display: none; background: var(--surface2); border: 1px solid rgba(246,194,91,.25); border-radius: 8px; padding: 8px 14px; font-size: 0.78rem; color: var(--accent3); gap: 20px; flex-wrap: wrap; align-items: center; }
+.cost-item { display: flex; flex-direction: column; gap: 2px; }
+.cost-val { font-family: var(--font-mono); font-size: 0.85rem; font-weight: 700; }
+.cost-lbl { color: var(--muted); font-size: 0.7rem; }
+#stream-area { display: none; margin-top: 10px; }
+.stream-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; font-size: 0.86rem; line-height: 1.7; color: #d0d8f0; min-height: 60px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+.stream-label { font-size: 0.74rem; color: var(--accent2); margin-bottom: 6px; }
+#answers-area { display: none; flex-direction: column; gap: 14px; align-items: center; width: 100%; max-width: 960px; }
+.answer-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; width: 100%; }
+.answer-header { background: var(--surface2); padding: 11px 16px; display: flex; align-items: flex-start; gap: 10px; border-bottom: 1px solid var(--border); }
+.q-badge { flex-shrink: 0; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 6px; color: #fff; font-size: 0.68rem; font-weight: 700; padding: 2px 7px; margin-top: 2px; }
+.q-text-label { font-size: 0.86rem; font-weight: 600; line-height: 1.4; flex: 1; }
+.answer-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: flex-start; }
+.answer-body { padding: 14px 16px; font-size: 0.86rem; line-height: 1.75; color: #d0d8f0; }
+.answer-body p { margin-bottom: 9px; }
+.answer-body h3, .answer-body h4 { color: var(--accent2); margin-bottom: 5px; margin-top: 12px; font-size: 0.95rem; }
+.answer-body ul { margin: 8px 0 8px 20px; }
+.answer-body li { margin-bottom: 4px; }
+.chunks-toggle { padding: 8px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.chunks-toggle:hover { background: var(--surface2); }
+.toggle-label { font-size: 0.76rem; color: var(--muted); }
+.toggle-arrow { font-size: 0.7rem; color: var(--muted); transition: transform .2s; }
+.chunks-panel { display: none; padding: 0 16px 14px; border-top: 1px solid var(--border); flex-direction: column; gap: 8px; }
+.chunk-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 8px 12px; font-size: 0.76rem; display: flex; flex-direction: column; gap: 4px; }
+.chunk-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.chunk-src { color: var(--accent2); font-family: var(--font-mono); font-size: 0.7rem; }
+.chunk-score { font-family: var(--font-mono); font-size: 0.7rem; padding: 1px 6px; border-radius: 4px; background: rgba(91,124,246,.15); color: var(--accent); }
+.chunk-score.high { background: rgba(56,201,176,.15); color: var(--accent2); }
+.chunk-score.med { background: rgba(246,194,91,.12); color: var(--accent3); }
+.chunk-text { color: #9ba8cc; line-height: 1.5; margin-top: 3px; font-size: 0.75rem; }
+.sources-row { padding: 8px 16px 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+.info-tag { display: inline-flex; align-items: center; gap: 5px; background: rgba(91,124,246,.1); border: 1px solid rgba(91,124,246,.25); border-radius: 6px; color: var(--accent); font-size: 0.72rem; padding: 3px 8px; }
+.file-drop { border: 2px dashed var(--border); border-radius: var(--radius); padding: 22px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; position: relative; }
+.file-drop:hover, .file-drop.dragover { border-color: var(--accent); background: rgba(91,124,246,.05); }
+.file-drop input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.drop-icon { font-size: 1.8rem; margin-bottom: 6px; }
+.drop-text { font-size: 0.83rem; color: var(--muted); }
+.drop-text strong { color: var(--text); }
+#file-list { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+.file-item { display: flex; align-items: center; gap: 8px; background: var(--surface2); border-radius: 6px; padding: 5px 10px; font-size: 0.78rem; }
+.fi-name { flex: 1; color: var(--accent2); font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fi-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 1rem; flex-shrink: 0; }
+.fi-del:hover { color: var(--danger); }
+.fi-cached { font-size: 0.68rem; color: var(--accent3); background: rgba(246,194,91,.1); border-radius: 4px; padding: 1px 5px; }
+#prompt-template { min-height: 130px; font-family: var(--font-mono); font-size: 0.78rem; }
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tab-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-family: var(--font-sans); font-size: 0.82rem; padding: 8px 16px; border-bottom: 2px solid transparent; transition: all .2s; margin-bottom: -1px; }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-btn:hover:not(.active) { color: var(--text); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+#toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 0.82rem; color: var(--text); opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 999; }
+#toast.show { opacity: 1; }
+.sep { height: 1px; background: var(--border); margin: 14px 0; }
+.flex-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.tag-mono { color: var(--accent2); font-family: var(--font-mono); font-size: 0.8rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-row">
+    <div class="logo-icon">🔬</div>
+    <h1>Contestador RAG · Preguntas de Investigación</h1>
+  </div>
+  <div class="subtitle">RAG completo en el navegador — sube PDFs, define preguntas, exporta resultados</div>
+</header>
+
+<div class="top-bar">
+  <button class="btn btn-secondary btn-sm" onclick="saveSession()">💾 Guardar sesión</button>
+  <button class="btn btn-secondary btn-sm" onclick="document.getElementById('session-input').click()">📂 Cargar sesión</button>
+  <input type="file" id="session-input" accept=".json" style="display:none" onchange="loadSession(this)">
+  <span style="flex:1"></span>
+  <div id="cost-bar">
+    <div class="cost-item"><div class="cost-val" id="c-emb-tok">—</div><div class="cost-lbl">Tokens emb.</div></div>
+    <div class="cost-item"><div class="cost-val" id="c-llm-tok">—</div><div class="cost-lbl">Tokens LLM</div></div>
+    <div class="cost-item"><div class="cost-val" id="c-cost">—</div><div class="cost-lbl">Coste est. USD</div></div>
+  </div>
+</div>
+
+<div class="card" style="padding-bottom:0">
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('config',this)">⚙️ Config</button>
+    <button class="tab-btn" onclick="switchTab('prompt',this)">📝 Prompt</button>
+    <button class="tab-btn" onclick="switchTab('pdfs',this)">📄 PDFs</button>
+    <button class="tab-btn" onclick="switchTab('questions',this)">❓ Preguntas</button>
+  </div>
+
+  <div class="tab-panel active" id="tab-config" style="padding-bottom:18px">
+    <div class="grid-2">
+      <div><label>API Key de OpenAI</label><input type="password" id="api-key" placeholder="sk-..." autocomplete="off"></div>
+      <div><label>Modelo LLM</label>
+        <select id="model-select">
+          <option value="gpt-4o-mini" selected>gpt-4o-mini (recomendado)</option>
+          <option value="gpt-4o">gpt-4o</option>
+          <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+          <option value="gpt-4.1">gpt-4.1</option>
+          <option value="gpt-4-turbo">gpt-4-turbo</option>
+          <option value="o4-mini">o4-mini</option>
+          <option value="o3-mini">o3-mini</option>
+        </select>
+      </div>
+    </div>
+    <div class="sep"></div>
+    <div class="grid-4" style="margin-bottom:12px">
+      <div><label>Modelo Embedding</label>
+        <select id="emb-model">
+          <option value="text-embedding-3-small" selected>3-small (rápido)</option>
+          <option value="text-embedding-3-large">3-large (preciso)</option>
+          <option value="text-embedding-ada-002">ada-002</option>
+        </select>
+      </div>
+      <div><label>Tamaño chunk (palabras)</label><input type="number" id="chunk-size" value="300" min="50" max="2000"></div>
+      <div><label>Solapamiento (palabras)</label><input type="number" id="chunk-overlap" value="30" min="0" max="500"></div>
+      <div><label>Top-K chunks por pregunta</label><input type="number" id="top-k" value="10" min="1" max="30"></div>
+    </div>
+    <div class="grid-2">
+      <div><label>Idioma de respuesta</label>
+        <select id="lang-select">
+          <option value="English">English</option>
+          <option value="Español" selected>Español</option>
+          <option value="auto">Automático (según pregunta)</option>
+          <option value="Français">Français</option>
+          <option value="Deutsch">Deutsch</option>
+          <option value="Português">Português</option>
+        </select>
+      </div>
+      <div><label>Opciones</label>
+        <div class="flex-row" style="margin-top:9px">
+          <label style="display:flex;align-items:center;gap:6px;color:var(--text);font-size:0.83rem;margin:0">
+            <input type="checkbox" id="opt-streaming" checked> Streaming
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;color:var(--text);font-size:0.83rem;margin:0">
+            <input type="checkbox" id="opt-rerank" checked> Re-ranking
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-prompt" style="padding-bottom:18px">
+    <div style="margin-bottom:8px;font-size:0.8rem;color:var(--muted)">
+      Variables: <span class="tag-mono">{context}</span> · <span class="tag-mono">{question}</span> · <span class="tag-mono">{language}</span>
+    </div>
+    <textarea id="prompt-template"></textarea>
+    <div class="flex-row" style="margin-top:10px">
+      <button class="btn btn-secondary btn-sm" onclick="resetPrompt()">↩ Restaurar por defecto</button>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-pdfs" style="padding-bottom:18px">
+    <div class="file-drop" id="drop-zone">
+      <input type="file" id="pdf-input" accept=".pdf" multiple>
+      <div class="drop-icon">📂</div>
+      <div class="drop-text"><strong>Haz clic o arrastra</strong> archivos PDF aquí</div>
+    </div>
+    <div id="file-list"></div>
+    <div class="flex-row" style="margin-top:10px">
+      <button class="btn btn-danger btn-sm" onclick="clearCache()">🗑 Limpiar caché</button>
+      <span id="cache-status" style="font-size:0.76rem;color:var(--muted)"></span>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="tab-questions" style="padding-bottom:18px">
+    <div id="questions-list"></div>
+    <div class="flex-row" style="margin-top:12px">
+      <button class="btn btn-secondary btn-sm" onclick="addQuestion()">+ Añadir pregunta</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadExampleQuestions()">📋 Ejemplos RAG</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="flex-row">
+    <button class="btn" id="run-btn" onclick="runPipeline()">🚀 Procesar y Responder</button>
+    <button class="btn btn-success" id="export-docx-btn" style="display:none" onclick="exportDocx()">⬇️ Word</button>
+    <button class="btn btn-warning" id="export-pdf-btn" style="display:none" onclick="exportPdf()">⬇️ PDF</button>
+  </div>
+  <div style="margin-top:14px">
+    <div id="progress-area">
+      <div class="progress-label" id="progress-label">Iniciando…</div>
+      <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-bar"></div></div>
+    </div>
+    <div id="stream-area">
+      <div class="stream-label" id="stream-label">Generando respuesta…</div>
+      <div class="stream-box" id="stream-box"></div>
+    </div>
+    <pre id="log"></pre>
+  </div>
+</div>
+
+<div id="answers-area"></div>
+<div id="toast"></div>
+
+<script>
+const DEFAULT_PROMPT = `Information:\n{context}\n\nUsing the above information, answer the following query in a detailed report in {language}:\n"{question}"\n\nThe report should:\n- Be structured with clear sections (Introduction, Analysis, Conclusion)\n- Include relevant citations to sources when applicable\n- Be comprehensive and evidence-based\n- Format the response in clean markdown with headers and paragraphs`;
+
+const COST_TABLE = {
+  'text-embedding-3-small': { input: 0.02, output: 0 },
+  'text-embedding-3-large': { input: 0.13, output: 0 },
+  'text-embedding-ada-002': { input: 0.10, output: 0 },
+  'gpt-4o-mini':  { input: 0.15, output: 0.60 },
+  'gpt-4o':       { input: 2.50, output: 10.0 },
+  'gpt-4.1-mini': { input: 0.40, output: 1.60 },
+  'gpt-4.1':      { input: 2.00, output: 8.0 },
+  'gpt-4-turbo':  { input: 10.0, output: 30.0 },
+  'o4-mini':      { input: 1.10, output: 4.40 },
+  'o3-mini':      { input: 1.10, output: 4.40 },
+};
+
+let pdfFiles = [];
+let vectorIndex = [];
+let answersData = [];
+let questionCount = 0;
+let totalEmbTokens = 0;
+let totalLLMInTokens = 0;
+let totalLLMOutTokens = 0;
+let logEl = null;
+
+(function init() {
+  document.getElementById('prompt-template').value = DEFAULT_PROMPT;
+  loadExampleQuestions();
+  setupDrop();
+  updateCacheStatus();
+})();
+
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+
+function saveSession() {
+  const s = {
+    apiKey: document.getElementById('api-key').value,
+    model: document.getElementById('model-select').value,
+    embModel: document.getElementById('emb-model').value,
+    chunkSize: document.getElementById('chunk-size').value,
+    chunkOverlap: document.getElementById('chunk-overlap').value,
+    topK: document.getElementById('top-k').value,
+    lang: document.getElementById('lang-select').value,
+    streaming: document.getElementById('opt-streaming').checked,
+    rerank: document.getElementById('opt-rerank').checked,
+    prompt: document.getElementById('prompt-template').value,
+    questions: getQuestions(),
+  };
+  const blob = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'rag-session.json'; a.click();
+  URL.revokeObjectURL(url);
+  toast('✅ Sesión guardada');
+}
+
+function loadSession(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const s = JSON.parse(e.target.result);
+      if (s.apiKey) document.getElementById('api-key').value = s.apiKey;
+      if (s.model) document.getElementById('model-select').value = s.model;
+      if (s.embModel) document.getElementById('emb-model').value = s.embModel;
+      if (s.chunkSize) document.getElementById('chunk-size').value = s.chunkSize;
+      if (s.chunkOverlap) document.getElementById('chunk-overlap').value = s.chunkOverlap;
+      if (s.topK) document.getElementById('top-k').value = s.topK;
+      if (s.lang) document.getElementById('lang-select').value = s.lang;
+      if (s.streaming !== undefined) document.getElementById('opt-streaming').checked = s.streaming;
+      if (s.rerank !== undefined) document.getElementById('opt-rerank').checked = s.rerank;
+      if (s.prompt) document.getElementById('prompt-template').value = s.prompt;
+      if (s.questions && s.questions.length) {
+        document.getElementById('questions-list').innerHTML = ''; questionCount = 0;
+        s.questions.forEach(q => addQuestion(q));
+      }
+      toast('✅ Sesión cargada');
+    } catch { toast('❌ Error al cargar sesión', true); }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function setupDrop() {
+  const zone = document.getElementById('drop-zone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    addFiles([...e.dataTransfer.files].filter(f => f.name.endsWith('.pdf')));
+  });
+  document.getElementById('pdf-input').addEventListener('change', e => {
+    addFiles([...e.target.files]); e.target.value = '';
+  });
+}
+function addFiles(files) {
+  files.forEach(f => { if (!pdfFiles.find(x => x.name === f.name)) pdfFiles.push(f); });
+  renderFileList();
+}
+function removeFile(name) { pdfFiles = pdfFiles.filter(f => f.name !== name); renderFileList(); }
+function renderFileList() {
+  const cached = getCachedKeys();
+  document.getElementById('file-list').innerHTML = pdfFiles.map(f => {
+    const isCached = cached.includes(cacheKey(f.name));
+    return `<div class="file-item">
+      <span>📄</span><span class="fi-name">${f.name}</span>
+      <span style="color:var(--muted);font-size:0.72rem">${(f.size/1024).toFixed(0)} KB</span>
+      ${isCached ? '<span class="fi-cached">⚡ caché</span>' : ''}
+      <button class="fi-del" onclick="removeFile('${f.name.replace(/'/g,"\\'")}')">×</button>
+    </div>`;
+  }).join('');
+}
+
+function cacheKey(n) { return 'rag_emb_' + n; }
+function getCachedKeys() { return Object.keys(localStorage).filter(k => k.startsWith('rag_emb_')); }
+function getCachedIndex(name) {
+  try { const r = localStorage.getItem(cacheKey(name)); return r ? JSON.parse(r) : null; } catch { return null; }
+}
+function setCachedIndex(name, chunks) {
+  try { localStorage.setItem(cacheKey(name), JSON.stringify(chunks)); } catch(e) { log('⚠️ Caché llena: ' + e.message, 'log-warn'); }
+}
+function clearCache() {
+  getCachedKeys().forEach(k => localStorage.removeItem(k));
+  updateCacheStatus(); renderFileList(); toast('🗑 Caché limpiada');
+}
+function updateCacheStatus() {
+  const keys = getCachedKeys();
+  document.getElementById('cache-status').textContent = keys.length ? keys.length + ' archivo(s) en caché' : 'Sin caché';
+}
+
+function addQuestion(text = '') {
+  questionCount++;
+  const list = document.getElementById('questions-list');
+  const div = document.createElement('div'); div.className = 'q-row';
+  div.innerHTML = `<div class="q-num">${questionCount}</div>
+    <textarea class="q-text-input" placeholder="Escribe tu pregunta de investigación…">${text}</textarea>
+    <button class="q-del" onclick="this.parentElement.remove();renumberQuestions()">×</button>`;
+  list.appendChild(div);
+}
+function renumberQuestions() {
+  document.querySelectorAll('#questions-list .q-row').forEach((r,i) => { r.querySelector('.q-num').textContent = i+1; });
+}
+function loadExampleQuestions() {
+  document.getElementById('questions-list').innerHTML = ''; questionCount = 0;
+  ['Is the RAG method the best tool to avoid hallucinations of large language models?',
+   'To what extent does the use of RAG surpass or complement fine-tuning in reducing hallucinations for specific domains?',
+   'What is the impact of the relevance and quality of retrieved documents on the error rate of language models using RAG?',
+   'What are the main limitations of current RAG approaches and how can they be addressed?'
+  ].forEach(q => addQuestion(q));
+}
+function getQuestions() {
+  return [...document.querySelectorAll('.q-text-input')].map(t => t.value.trim()).filter(q => q.length > 0);
+}
+
+function resetPrompt() { document.getElementById('prompt-template').value = DEFAULT_PROMPT; toast('↩ Prompt restaurado'); }
+function buildPrompt(ctx, q, lang) {
+  return document.getElementById('prompt-template').value
+    .replace('{context}', ctx).replace('{question}', q).replace('{language}', lang);
+}
+
+function showProgress(show) { document.getElementById('progress-area').style.display = show ? 'flex' : 'none'; }
+function setProgress(pct, label) {
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = label;
+}
+function log(msg, type) {
+  if (!logEl) logEl = document.getElementById('log');
+  logEl.style.display = 'block';
+  const span = document.createElement('span'); span.className = type || ''; span.textContent = msg + '\n';
+  logEl.appendChild(span); logEl.scrollTop = logEl.scrollHeight;
+}
+function toast(msg, err) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = err ? 'rgba(224,92,107,.4)' : 'rgba(56,201,176,.3)';
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+function addEmbTokens(n) { totalEmbTokens += n; updateCostDisplay(); }
+function addLLMTokens(inp, out) { totalLLMInTokens += inp; totalLLMOutTokens += out; updateCostDisplay(); }
+function updateCostDisplay() {
+  const em = document.getElementById('emb-model').value;
+  const lm = document.getElementById('model-select').value;
+  const cost = (totalEmbTokens/1e6*(COST_TABLE[em]?.input||0))
+             + (totalLLMInTokens/1e6*(COST_TABLE[lm]?.input||0))
+             + (totalLLMOutTokens/1e6*(COST_TABLE[lm]?.output||0));
+  document.getElementById('cost-bar').style.display = 'flex';
+  document.getElementById('c-emb-tok').textContent = totalEmbTokens.toLocaleString();
+  document.getElementById('c-llm-tok').textContent = (totalLLMInTokens+totalLLMOutTokens).toLocaleString();
+  document.getElementById('c-cost').textContent = '$' + cost.toFixed(4);
+}
+
+async function loadPdfJs() {
+  if (window.pdfjsLib) return;
+  await new Promise((res,rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload = res; s.onerror = rej; document.head.appendChild(s);
+  });
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+async function extractTextFromPdf(file) {
+  await loadPdfJs();
+  const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map(it => it.str).join(' ') + ' ';
+  }
+  return text;
+}
+
+function chunkText(text, maxSize, overlap) {
+  const tokens = text.replace(/\s+/g,' ').trim().split(' ');
+  const chunks = []; let i = 0;
+  while (i < tokens.length) {
+    const chunk = tokens.slice(i, i+maxSize).join(' ');
+    if (chunk.split(' ').length >= 10) chunks.push(chunk);
+    i += maxSize - overlap;
+  }
+  return chunks;
+}
+
+async function getEmbedding(text, apiKey, model) {
+  const res = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify({ model, input: text.replace(/\n/g,' ') })
+  });
+  if (!res.ok) throw new Error('Embedding ' + res.status + ': ' + await res.text());
+  const data = await res.json();
+  addEmbTokens(data.usage?.prompt_tokens || 0);
+  return data.data[0].embedding;
+}
+async function callLLM(prompt, apiKey, model) {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.0 })
+  });
+  if (!res.ok) throw new Error('LLM ' + res.status + ': ' + await res.text());
+  const data = await res.json();
+  addLLMTokens(data.usage?.prompt_tokens||0, data.usage?.completion_tokens||0);
+  return data.choices[0].message.content;
+}
+async function callLLMStreaming(prompt, apiKey, model, onChunk) {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+    body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.0, stream: true })
+  });
+  if (!res.ok) throw new Error('LLM stream ' + res.status + ': ' + await res.text());
+  const reader = res.body.getReader(); const decoder = new TextDecoder();
+  let full = '';
+  while (true) {
+    const { done, value } = await reader.read(); if (done) break;
+    const lines = decoder.decode(value).split('\n').filter(l => l.startsWith('data: '));
+    for (const line of lines) {
+      const j = line.slice(6).trim(); if (j === '[DONE]') continue;
+      try {
+        const obj = JSON.parse(j);
+        const delta = obj.choices?.[0]?.delta?.content || '';
+        if (delta) { full += delta; onChunk(delta); }
+        if (obj.usage) addLLMTokens(obj.usage.prompt_tokens||0, obj.usage.completion_tokens||0);
+      } catch {}
+    }
+  }
+  if (!totalLLMInTokens) addLLMTokens(Math.round(prompt.length/4), Math.round(full.length/4));
+  return full;
+}
+
+function cosineSim(a, b) {
+  let dot=0,na=0,nb=0;
+  for (let i=0;i<a.length;i++) { dot+=a[i]*b[i]; na+=a[i]*a[i]; nb+=b[i]*b[i]; }
+  return dot/(Math.sqrt(na)*Math.sqrt(nb)+1e-10);
+}
+function topK(qEmb, index, k) {
+  return index.map(item => ({...item, score: cosineSim(qEmb, item.embedding)}))
+    .sort((a,b) => b.score-a.score).slice(0,k);
+}
+async function rerank(question, chunks, apiKey, model) {
+  if (chunks.length <= 3) return chunks;
+  const prompt = `Research question: "${question}"\n\nRate the relevance of each passage 0-10 (10=most relevant).\nReturn ONLY a JSON array of numbers e.g. [8,3,7,...]\n\nPassages:\n${chunks.map((c,i) => `${i+1}. ${c.text.slice(0,200)}`).join('\n\n')}`;
+  try {
+    const raw = await callLLM(prompt, apiKey, model);
+    const m = raw.match(/\[[\d,\s\.]+\]/);
+    if (!m) return chunks;
+    const scores = JSON.parse(m[0]);
+    return chunks.map((c,i) => ({...c, rerankScore: scores[i]??c.score}))
+      .sort((a,b) => b.rerankScore-a.rerankScore);
+  } catch { return chunks; }
+}
+
+async function runPipeline() {
+  const apiKey = document.getElementById('api-key').value.trim();
+  const model = document.getElementById('model-select').value;
+  const embModel = document.getElementById('emb-model').value;
+  const chunkSize = parseInt(document.getElementById('chunk-size').value)||300;
+  const chunkOverlap = parseInt(document.getElementById('chunk-overlap').value)||30;
+  const topKVal = parseInt(document.getElementById('top-k').value)||10;
+  const lang = document.getElementById('lang-select').value;
+  const useStreaming = document.getElementById('opt-streaming').checked;
+  const useRerank = document.getElementById('opt-rerank').checked;
+  const questions = getQuestions();
+
+  if (!apiKey || !apiKey.startsWith('sk-')) { toast('❌ API Key inválida', true); return; }
+  if (pdfFiles.length === 0) { toast('❌ Sube al menos un PDF', true); return; }
+  if (questions.length === 0) { toast('❌ Escribe al menos una pregunta', true); return; }
+
+  const runBtn = document.getElementById('run-btn');
+  runBtn.disabled = true;
+  ['export-docx-btn','export-pdf-btn'].forEach(id => document.getElementById(id).style.display = 'none');
+  document.getElementById('answers-area').style.display = 'none';
+  document.getElementById('answers-area').innerHTML = '';
+  document.getElementById('log').innerHTML = ''; logEl = null;
+  document.getElementById('stream-area').style.display = 'none';
+  document.getElementById('stream-box').textContent = '';
+  answersData = []; vectorIndex = [];
+  totalEmbTokens = 0; totalLLMInTokens = 0; totalLLMOutTokens = 0;
+  showProgress(true);
+
+  try {
+    setProgress(5, 'Leyendo PDFs…');
+    let allChunks = []; let cid = 0;
+
+    for (let i = 0; i < pdfFiles.length; i++) {
+      const f = pdfFiles[i];
+      const cached = getCachedIndex(f.name);
+      if (cached) {
+        log('⚡ ' + f.name + ' — desde caché (' + cached.length + ' chunks)', 'log-ok');
+        cached.forEach(c => allChunks.push(c));
+      } else {
+        log('📄 Leyendo: ' + f.name);
+        const text = await extractTextFromPdf(f);
+        const chunks = chunkText(text, chunkSize, chunkOverlap);
+        log('  ✂️ ' + chunks.length + ' chunks');
+        chunks.forEach(ch => allChunks.push({ id: cid++, source: f.name, text: ch, embedding: null }));
+      }
+      setProgress(5+(i+1)/pdfFiles.length*15, 'Leyendo PDFs… ('+(i+1)+'/'+pdfFiles.length+')');
+    }
+
+    const needEmb = allChunks.filter(c => !c.embedding);
+    if (needEmb.length > 0) {
+      log('🔢 Generando embeddings para ' + needEmb.length + ' chunks (' + embModel + ')…');
+      for (let i = 0; i < needEmb.length; i++) {
+        needEmb[i].embedding = await getEmbedding(needEmb[i].text, apiKey, embModel);
+        if ((i+1)%5===0 || i===needEmb.length-1)
+          setProgress(20+(i+1)/needEmb.length*42, 'Embeddings: '+(i+1)+'/'+needEmb.length);
+        if (i>0 && i%60===0) await sleep(600);
+      }
+      vectorIndex = allChunks;
+      const bySource = {};
+      allChunks.forEach(c => { (bySource[c.source]=bySource[c.source]||[]).push(c); });
+      Object.entries(bySource).forEach(([src,chunks]) => {
+        if (chunks.every(c => c.embedding)) setCachedIndex(src, chunks);
+      });
+    } else {
+      vectorIndex = allChunks;
+    }
+    updateCacheStatus(); renderFileList();
+    log('✅ Índice listo (' + vectorIndex.length + ' vectores)', 'log-ok');
+
+    const streamArea = document.getElementById('stream-area');
+    const streamBox = document.getElementById('stream-box');
+    const streamLabel = document.getElementById('stream-label');
+
+    for (let qi = 0; qi < questions.length; qi++) {
+      const q = questions[qi];
+      setProgress(63+qi/questions.length*33, 'Respondiendo '+(qi+1)+'/'+questions.length+'…');
+      log('❓ P'+(qi+1)+': '+q.slice(0,70)+'…');
+
+      const qEmb = await getEmbedding(q, apiKey, embModel);
+      let relevant = topK(qEmb, vectorIndex, topKVal);
+      if (useRerank && relevant.length > 3) {
+        log('  🔁 Re-ranking…');
+        relevant = await rerank(q, relevant, apiKey, model);
+      }
+
+      const context = relevant.map(r => '[Source: '+r.source+']\n'+r.text).join('\n---\n');
+      const langLabel = lang === 'auto' ? 'the same language as the question' : lang;
+      const prompt = buildPrompt(context, q, langLabel);
+
+      let answer = '';
+      if (useStreaming) {
+        streamLabel.textContent = 'Generando respuesta '+(qi+1)+'/'+questions.length+'…';
+        streamBox.textContent = '';
+        streamArea.style.display = 'block';
+        answer = await callLLMStreaming(prompt, apiKey, model, delta => {
+          streamBox.textContent += delta;
+          streamBox.scrollTop = streamBox.scrollHeight;
+        });
+        streamArea.style.display = 'none';
+      } else {
+        answer = await callLLM(prompt, apiKey, model);
+      }
+
+      answersData.push({ question: q, answer, sources: [...new Set(relevant.map(r=>r.source))], chunks: relevant });
+      log('  ✅ Respuesta '+(qi+1)+' generada', 'log-ok');
+    }
+
+    setProgress(98, 'Renderizando…');
+    renderAnswers();
+    setProgress(100, '✅ Completado — '+questions.length+' pregunta(s)');
+    ['export-docx-btn','export-pdf-btn'].forEach(id => document.getElementById(id).style.display = 'inline-block');
+    log('🎉 ¡Proceso completado!', 'log-ok');
+    toast('✅ ¡Proceso completado!');
+
+  } catch (err) {
+    log('❌ Error: ' + err.message, 'log-err');
+    setProgress(0, 'Error');
+    toast('❌ ' + err.message, true);
+    console.error(err);
+  } finally { runBtn.disabled = false; }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function renderAnswers() {
+  const area = document.getElementById('answers-area');
+  area.style.display = 'flex';
+  area.innerHTML = `<div class="card" style="margin-bottom:4px">
+    <div class="card-title">💡 Respuestas de Investigación</div>
+    <div style="font-size:0.78rem;color:var(--muted)">${answersData.length} pregunta(s) respondida(s)</div>
+  </div>`;
+
+  answersData.forEach((item, i) => {
+    const card = document.createElement('div'); card.className = 'answer-card';
+    const srcHtml = item.sources.map(s=>`<span class="info-tag">📄 ${s}</span>`).join('');
+    card.innerHTML = `
+      <div class="answer-header">
+        <span class="q-badge">P${i+1}</span>
+        <div class="q-text-label">${escHtml(item.question)}</div>
+        <div class="answer-actions">
+          <button class="btn btn-secondary btn-xs" onclick="copyAnswer(${i})" title="Copiar">📋</button>
+        </div>
+      </div>
+      <div class="answer-body" id="ans-body-${i}">${md2html(item.answer)}</div>
+      <div class="sources-row">${srcHtml}</div>
+      <div class="chunks-toggle" onclick="toggleChunks(${i},this)">
+        <span class="toggle-label">Ver ${item.chunks.length} fragmentos recuperados (scores de relevancia)</span>
+        <span class="toggle-arrow" id="arrow-${i}">▶</span>
+      </div>
+      <div class="chunks-panel" id="chunks-${i}">
+        ${item.chunks.map((c,ci) => {
+          const score = c.rerankScore ?? c.score;
+          const cls = score>=0.7?'high':score>=0.45?'med':'';
+          return `<div class="chunk-item">
+            <div class="chunk-meta">
+              <span style="color:var(--muted);font-family:var(--font-mono);font-size:0.68rem">#${ci+1}</span>
+              <span class="chunk-src">📄 ${c.source}</span>
+              <span class="chunk-score ${cls}">score: ${score.toFixed(3)}</span>
+            </div>
+            <div class="chunk-text">${escHtml(c.text.slice(0,300))}${c.text.length>300?'…':''}</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    area.appendChild(card);
+  });
+}
+
+function toggleChunks(i, el) {
+  const panel = document.getElementById('chunks-'+i);
+  const arrow = document.getElementById('arrow-'+i);
+  const open = panel.style.display === 'flex';
+  panel.style.display = open ? 'none' : 'flex';
+  arrow.style.transform = open ? '' : 'rotate(90deg)';
+  el.querySelector('.toggle-label').textContent = open
+    ? 'Ver '+answersData[i].chunks.length+' fragmentos recuperados (scores de relevancia)'
+    : 'Ocultar fragmentos';
+}
+async function copyAnswer(i) {
+  try { await navigator.clipboard.writeText(answersData[i].answer); toast('📋 Copiado'); }
+  catch { toast('❌ No se pudo copiar', true); }
+}
+
+function md2html(text) {
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/^#{4}\s+(.+)$/gm,'<h4>$1</h4>')
+    .replace(/^#{3}\s+(.+)$/gm,'<h3>$1</h3>')
+    .replace(/^#{2}\s+(.+)$/gm,'<h3>$1</h3>')
+    .replace(/^#{1}\s+(.+)$/gm,'<h3>$1</h3>')
+    .replace(/^[-*]\s+(.+)$/gm,'<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g,s=>'<ul>'+s+'</ul>')
+    .replace(/\n\n+/g,'</p><p>')
+    .replace(/^(?!<[hul])/,'<p>').replace(/([^>])$/,'$1</p>');
+}
+function escHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function exportDocx() {
+  if (!answersData.length) return;
+  if (!window.docx) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.umd.min.js');
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = window.docx;
+  const today = new Date().toISOString().slice(0,10);
+  const children = [
+    new Paragraph({ text: 'Informe RAG — Preguntas de Investigación', heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }),
+    new Paragraph({ children: [new TextRun({ text: 'Generado: '+today, italics:true, color:'888888' })], alignment: AlignmentType.CENTER }),
+    new Paragraph({ text: '' }),
+  ];
+  answersData.forEach((item,i) => {
+    children.push(
+      new Paragraph({ text: (i+1)+'. '+item.question, heading: HeadingLevel.HEADING_2 }),
+      new Paragraph({ children: [new TextRun({ text: 'Fuentes: '+item.sources.join(', '), italics:true, color:'555555' })] }),
+      new Paragraph({ text: '' }),
+    );
+    item.answer.split(/\n\n+/).forEach(para => {
+      if (para.trim()) children.push(new Paragraph({
+        children:[new TextRun({ text: para.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/^#{1,4}\s+/,'').trim() })]
+      }));
+    });
+    children.push(new Paragraph({ text: '' }));
+  });
+  const doc = new Document({ sections: [{ children }] });
+  const blob = await Packer.toBlob(doc);
+  downloadBlob(blob, 'informe_rag_'+today+'.docx');
+  toast('⬇️ Word descargado');
+}
+
+function exportPdf() {
+  if (!answersData.length) return;
+  const today = new Date().toISOString().slice(0,10);
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Informe RAG</title>
+    <style>body{font-family:Georgia,serif;max-width:800px;margin:40px auto;color:#222;line-height:1.7}
+    h1{text-align:center;font-size:1.5rem;margin-bottom:4px}.date{text-align:center;color:#888;font-size:.85rem;margin-bottom:32px}
+    h2{font-size:1.1rem;color:#1a3a6b;border-bottom:1px solid #ccc;padding-bottom:4px;margin-top:32px}
+    .src{font-size:.8rem;color:#666;margin-bottom:16px}p{margin-bottom:10px;text-align:justify}
+    h3,h4{color:#1a5c4a;margin-top:14px}ul{margin:8px 0 8px 20px}@media print{body{margin:20px}}</style>
+    </head><body>
+    <h1>Informe RAG — Preguntas de Investigación</h1>
+    <div class="date">Generado: ${today}</div>
+    ${answersData.map((item,i)=>`<h2>${i+1}. ${escHtml(item.question)}</h2>
+    <div class="src">Fuentes: ${item.sources.join(', ')}</div>${md2html(item.answer)}`).join('')}
+    </body></html>`;
+  const win = window.open('','_blank');
+  win.document.write(html); win.document.close();
+  setTimeout(()=>{ win.focus(); win.print(); }, 400);
+  toast('🖨 Abre la ventana e imprime como PDF');
+}
+
+function loadScript(src) {
+  return new Promise((res,rej) => {
+    const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s);
+  });
+}
+function downloadBlob(blob, name) {
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
