@@ -836,8 +836,16 @@ function escHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replac
 
 async function exportDocx() {
   if (!answersData.length) return;
-  if (!window.docx) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.umd.min.js');
-  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = window.docx;
+  try {
+    if (!window.docx) {
+      try {
+        await loadScript('https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js');
+      } catch {
+        await loadScript('https://unpkg.com/docx@8.5.0/build/index.umd.min.js');
+      }
+    }
+    if (!window.docx) throw new Error('No se pudo cargar la librería docx');
+    const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = window.docx;
   const today = new Date().toISOString().slice(0,10);
   const children = [
     new Paragraph({ text: 'Informe RAG — Preguntas de Investigación', heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }),
@@ -861,6 +869,11 @@ async function exportDocx() {
   const blob = await Packer.toBlob(doc);
   downloadBlob(blob, 'informe_rag_'+today+'.docx');
   toast('⬇️ Word descargado');
+  } catch(e) {
+    console.error(e);
+    toast('❌ Error al generar Word: ' + e.message, true);
+    log('❌ Export Word: ' + e.message, 'log-warn');
+  }
 }
 
 function exportPdf() {
@@ -891,7 +904,8 @@ function loadScript(src) {
 }
 function downloadBlob(blob, name) {
   const url=URL.createObjectURL(blob); const a=document.createElement('a');
-  a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
+  a.href=url; a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 2000);
 }
 </script>
 </body>
