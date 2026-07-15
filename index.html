@@ -315,11 +315,14 @@ let totalLLMInTokens = 0;
 let totalLLMOutTokens = 0;
 let logEl = null;
 
-(function init() {
+(async function init() {
   document.getElementById('prompt-template').value = DEFAULT_PROMPT;
   loadExampleQuestions();
   setupDrop();
+  await refreshCachedKeys();
+  await migrateLocalStorageCache();
   updateCacheStatus();
+  renderFileList();
 })();
 
 function switchTab(id, btn) {
@@ -408,16 +411,60 @@ function renderFileList() {
 }
 
 function cacheKey(n) { return 'rag_emb_' + n; }
-function getCachedKeys() { return Object.keys(localStorage).filter(k => k.startsWith('rag_emb_')); }
-function getCachedIndex(name) {
-  try { const r = localStorage.getItem(cacheKey(name)); return r ? JSON.parse(r) : null; } catch { return null; }
+
+/* ---- Caché de embeddings en IndexedDB (localStorage se queda corto: ~5 MB) ---- */
+const IDB_NAME = 'rag_cache_db', IDB_STORE = 'embeddings';
+let cachedKeysSet = new Set(); // espejo síncrono de las claves, para la UI
+
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
 }
-function setCachedIndex(name, chunks) {
-  try { localStorage.setItem(cacheKey(name), JSON.stringify(chunks)); } catch(e) { log('⚠️ Caché llena: ' + e.message, 'log-warn'); }
+function idbReq(mode, fn) {
+  return idbOpen().then(db => new Promise((res, rej) => {
+    const tx = db.transaction(IDB_STORE, mode);
+    const req = fn(tx.objectStore(IDB_STORE));
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+    tx.oncomplete = () => db.close();
+  }));
 }
-function clearCache() {
-  getCachedKeys().forEach(k => localStorage.removeItem(k));
+
+function getCachedKeys() { return [...cachedKeysSet]; }
+async function refreshCachedKeys() {
+  try { cachedKeysSet = new Set(await idbReq('readonly', s => s.getAllKeys())); }
+  catch { cachedKeysSet = new Set(); }
+}
+async function getCachedIndex(name) {
+  try { return (await idbReq('readonly', s => s.get(cacheKey(name)))) || null; }
+  catch { return null; }
+}
+async function setCachedIndex(name, chunks) {
+  try {
+    await idbReq('readwrite', s => s.put(chunks, cacheKey(name)));
+    cachedKeysSet.add(cacheKey(name));
+  } catch(e) { log('⚠️ No se pudo guardar en caché: ' + e.message, 'log-warn'); }
+}
+async function clearCache() {
+  try { await idbReq('readwrite', s => s.clear()); } catch {}
+  cachedKeysSet.clear();
   updateCacheStatus(); renderFileList(); toast('🗑 Caché limpiada');
+}
+/* Migra entradas antiguas de localStorage a IndexedDB (una sola vez) */
+async function migrateLocalStorageCache() {
+  const old = Object.keys(localStorage).filter(k => k.startsWith('rag_emb_'));
+  for (const k of old) {
+    try {
+      const data = JSON.parse(localStorage.getItem(k));
+      await idbReq('readwrite', s => s.put(data, k));
+      cachedKeysSet.add(k);
+    } catch {}
+    localStorage.removeItem(k);
+  }
 }
 function updateCacheStatus() {
   const keys = getCachedKeys();
@@ -623,7 +670,7 @@ async function runPipeline() {
 
     for (let i = 0; i < pdfFiles.length; i++) {
       const f = pdfFiles[i];
-      const cached = getCachedIndex(f.name);
+      const cached = await getCachedIndex(f.name);
       if (cached) {
         log('⚡ ' + f.name + ' — desde caché (' + cached.length + ' chunks)', 'log-ok');
         cached.forEach(c => allChunks.push(c));
@@ -649,9 +696,9 @@ async function runPipeline() {
       vectorIndex = allChunks;
       const bySource = {};
       allChunks.forEach(c => { (bySource[c.source]=bySource[c.source]||[]).push(c); });
-      Object.entries(bySource).forEach(([src,chunks]) => {
-        if (chunks.every(c => c.embedding)) setCachedIndex(src, chunks);
-      });
+      for (const [src, chunks] of Object.entries(bySource)) {
+        if (chunks.every(c => c.embedding)) await setCachedIndex(src, chunks);
+      }
     } else {
       vectorIndex = allChunks;
     }
